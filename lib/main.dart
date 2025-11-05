@@ -5,27 +5,15 @@ import 'dart:io';
 import 'models/product.dart';
 import 'services/product_repository.dart';
 import 'services/auth_service.dart';
-import 'services/firebase_auth_service.dart';
 import 'services/favorites_service.dart';
 import 'services/cart_service.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'pages/auth/login_page.dart';
 import 'pages/auth/signup_selection_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize Firebase - Note: You need to add firebase_options.dart file
-  // Run: flutterfire configure
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    // If Firebase is not configured, the app will still work with local auth
-    debugPrint('Firebase not initialized: $e');
-  }
-  // Initialize services
-  await FirebaseAuthService().init();
-  await AuthService().init(); // Keep old service for backward compatibility
+  await AuthService().init();
   await FavoritesService().init();
   await CartService().init();
   // Seed with initial demo products on first launch
@@ -143,15 +131,11 @@ class _HomePageState extends State<HomePage> {
       const ProfileTab(),
     ];
 
-    return ValueListenableBuilder<dynamic>(
-      valueListenable: FirebaseAuthService().currentUserListenable,
-      builder: (BuildContext context, dynamic firebaseUser, Widget? _) {
-        return ValueListenableBuilder<String?>(
-          valueListenable: AuthService().currentUserIdListenable,
-          builder: (BuildContext context, String? uid, Widget? _) {
-            final bool isOwner = AuthService().isOwner || 
-              (firebaseUser != null && firebaseUser.email?.contains('owner') == true);
-            return Scaffold(
+    return ValueListenableBuilder<String?>(
+      valueListenable: AuthService().currentUserIdListenable,
+      builder: (BuildContext context, String? uid, Widget? _) {
+        final bool isOwner = AuthService().isOwner;
+        return Scaffold(
           appBar: AppBar(
             title: Row(
               children: <Widget>[
@@ -205,8 +189,6 @@ class _HomePageState extends State<HomePage> {
             unselectedItemColor: Colors.grey,
             type: BottomNavigationBarType.fixed,
           ),
-            );
-          },
         );
       },
     );
@@ -415,82 +397,53 @@ class ProfileTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<dynamic>(
-      valueListenable: FirebaseAuthService().currentUserListenable,
-      builder: (BuildContext context, dynamic firebaseUser, Widget? _) {
-        // Fallback to old auth service if Firebase not available
-        final bool hasFirebaseUser = firebaseUser != null;
-        final String? uid = hasFirebaseUser ? firebaseUser.uid : null;
-        
-        return ValueListenableBuilder<String?>(
-          valueListenable: AuthService().currentUserIdListenable,
-          builder: (BuildContext context, String? oldUid, Widget? _) {
-            final bool isLoggedIn = hasFirebaseUser || oldUid != null;
-            final bool isOwner = AuthService().isOwner || (hasFirebaseUser && firebaseUser.email?.contains('owner') == true);
-            
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return ValueListenableBuilder<String?>(
+      valueListenable: AuthService().currentUserIdListenable,
+      builder: (BuildContext context, String? uid, Widget? _) {
+        final bool isOwner = AuthService().isOwner;
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('Profile', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 16),
+              Row(
                 children: <Widget>[
-                  Text('Profile', style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: <Widget>[
-                      const CircleAvatar(child: Icon(Icons.person)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          !isLoggedIn 
-                            ? 'Guest' 
-                            : hasFirebaseUser 
-                              ? 'User: ${firebaseUser.email ?? uid}' 
-                              : 'User: $oldUid',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  if (!isLoggedIn) ...<Widget>[
-                    FilledButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-                      ),
-                      icon: const Icon(Icons.login),
-                      label: const Text('Login'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const SignupSelectionScreen()),
-                      ),
-                      icon: const Icon(Icons.person_add_alt_1),
-                      label: const Text('Sign Up'),
-                    ),
-                  ] else ...<Widget>[
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(isOwner ? 'Store Owner' : 'Regular User'),
-                      subtitle: Text(isOwner ? 'Admin tools are visible in the app bar.' : 'Admin tools hidden.'),
-                      leading: Icon(isOwner ? Icons.verified : Icons.person_outline),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        if (hasFirebaseUser) {
-                          await FirebaseAuthService().signOut();
-                        } else {
-                          await AuthService().signOut();
-                        }
-                      },
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Sign out'),
-                    ),
-                  ],
+                  const CircleAvatar(child: Icon(Icons.person)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(uid == null ? 'Guest' : 'User: $uid')),
                 ],
               ),
-            );
-          },
+              const SizedBox(height: 24),
+              if (uid == null) ...<Widget>[
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LoginScreen())),
+                  icon: const Icon(Icons.login),
+                  label: const Text('Login'),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SignupSelectionScreen())),
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Sign Up'),
+                ),
+              ] else ...<Widget>[
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(isOwner ? 'Store Owner' : 'Regular User'),
+                  subtitle: Text(isOwner ? 'Admin tools are visible in the app bar.' : 'Admin tools hidden.'),
+                  leading: Icon(isOwner ? Icons.verified : Icons.person_outline),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => AuthService().signOut(),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sign out'),
+                ),
+              ],
+            ],
+          ),
         );
       },
     );
@@ -691,12 +644,8 @@ class AdminPage extends StatefulWidget {
 class _AdminPageState extends State<AdminPage> {
   @override
   Widget build(BuildContext context) {
-    // Gate admin access here as a second line of defense
-    final dynamic firebaseUser = FirebaseAuthService().currentUser;
-    final bool isOwner = AuthService().isOwner || 
-      (firebaseUser != null && firebaseUser.email?.contains('owner') == true);
-    
-    if (!isOwner) {
+    // UI-only gating using local AuthService
+    if (!AuthService().isOwner) {
       return const Scaffold(
         body: Center(child: Text('Access denied')),
       );

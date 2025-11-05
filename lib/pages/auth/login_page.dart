@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../services/firebase_auth_service.dart';
 import 'signup_selection_page.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -146,23 +145,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    try {
-      await FirebaseAuthService().signIn(
-        _email.text.trim(),
-        _password.text.trim(),
-      );
-      if (!mounted) return;
-      Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    setState(() => _loading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Login successful (UI test only)')),
+    );
+    Navigator.of(context).pop();
   }
 }

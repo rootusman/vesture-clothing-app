@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../services/firebase_auth_service.dart';
 
 class RegularUserSignupScreen extends StatefulWidget {
   const RegularUserSignupScreen({super.key});
@@ -189,32 +188,16 @@ class _RegularUserSignupScreenState extends State<RegularUserSignupScreen> {
   Future<void> _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    try {
-      await FirebaseAuthService().signUpRegularUser(
-        email: _email.text.trim(),
-        password: _password.text.trim(),
-        firstName: _firstName.text.trim(),
-        lastName: _lastName.text.trim(),
-      );
-      if (!mounted) return;
-      Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Account created successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    if (!mounted) return;
+    setState(() => _loading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Account created (UI test only)!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+    Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
   }
 }
 
