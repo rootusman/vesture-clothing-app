@@ -6,9 +6,10 @@ class ProductModel {
   // Backward-compat single image
   final String imageUrl;
   // New: multiple images (file paths or URLs)
-  final List<String> imageUrls;
+  final List<String> sizes;
   final String category;
   final int stock;
+  final List<String> imageUrls;
   final bool isFavorite;
 
   const ProductModel({
@@ -20,6 +21,7 @@ class ProductModel {
     required this.category,
     required this.stock,
     this.imageUrls = const <String>[],
+    this.sizes = const <String>[],
     this.isFavorite = false,
   });
 
@@ -34,6 +36,7 @@ class ProductModel {
     List<String>? imageUrls,
     String? category,
     int? stock,
+    List<String>? sizes,
     bool? isFavorite,
   }) {
     return ProductModel(
@@ -45,22 +48,34 @@ class ProductModel {
       imageUrls: imageUrls ?? this.imageUrls,
       category: category ?? this.category,
       stock: stock ?? this.stock,
+      sizes: sizes ?? this.sizes,
       isFavorite: isFavorite ?? this.isFavorite,
     );
   }
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     final List<dynamic>? imgs = json['imageUrls'] as List<dynamic>?;
-    final List<String> parsedImages = imgs != null ? imgs.map((dynamic e) => e as String).toList() : <String>[];
+    final List<String> parsedImages = imgs != null
+        ? imgs.map((dynamic e) => e as String).toList()
+        : <String>[];
+
+    final List<dynamic>? sz = json['sizes'] as List<dynamic>?;
+    final List<String> parsedSizes = sz != null
+        ? sz.map((dynamic e) => e as String).toList()
+        : <String>[];
+
     return ProductModel(
       id: json['id'] as String,
       name: json['name'] as String,
       brand: json['brand'] as String,
       price: (json['price'] as num).toDouble(),
-      imageUrl: json['imageUrl'] as String? ?? (parsedImages.isNotEmpty ? parsedImages.first : ''),
+      imageUrl:
+          json['imageUrl'] as String? ??
+          (parsedImages.isNotEmpty ? parsedImages.first : ''),
       imageUrls: parsedImages,
       category: json['category'] as String? ?? 'All',
       stock: (json['stock'] as num?)?.toInt() ?? 0,
+      sizes: parsedSizes,
       isFavorite: json['isFavorite'] as bool? ?? false,
     );
   }
@@ -75,6 +90,7 @@ class ProductModel {
       'imageUrls': imageUrls,
       'category': category,
       'stock': stock,
+      'sizes': sizes,
       'isFavorite': isFavorite,
     };
   }

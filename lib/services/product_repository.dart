@@ -1,7 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/product.dart';
 
@@ -10,49 +8,86 @@ class ProductRepository {
   factory ProductRepository() => _instance;
   ProductRepository._internal();
 
-  static const String _storageKey = 'products_v1';
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ValueNotifier<List<ProductModel>> productsListenable =
+      ValueNotifier<List<ProductModel>>(<ProductModel>[]);
 
-  final ValueNotifier<List<ProductModel>> productsListenable = ValueNotifier<List<ProductModel>>(<ProductModel>[]);
-
-  SharedPreferences? _prefs;
+  bool _initialized = false;
 
   Future<void> init({List<ProductModel>? seed}) async {
-    _prefs ??= await SharedPreferences.getInstance();
-    final String? raw = _prefs!.getString(_storageKey);
-    if (raw == null) {
-      final List<ProductModel> initial = seed ?? <ProductModel>[];
-      productsListenable.value = initial;
-      await _persist();
-    } else {
-      final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
-      final List<ProductModel> loaded = decoded.map((dynamic item) => ProductModel.fromJson(item as Map<String, dynamic>)).toList();
-      productsListenable.value = loaded;
+    if (_initialized) return;
+    _initialized = true;
+
+    // Listen to products collection in real-time
+    _firestore.collection('products').snapshots().listen((snapshot) {
+      final List<ProductModel> products = snapshot.docs
+          .map((doc) {
+            try {
+              return ProductModel.fromJson({'id': doc.id, ...doc.data()});
+            } catch (e) {
+              debugPrint('Error parsing product ${doc.id}: $e');
+              return null;
+            }
+          })
+          .whereType<ProductModel>()
+          .toList();
+
+      productsListenable.value = products;
+    });
+
+    // If seed data provided and collection is empty, add it
+    if (seed != null && seed.isNotEmpty) {
+      final snapshot = await _firestore.collection('products').limit(1).get();
+      if (snapshot.docs.isEmpty) {
+        for (final product in seed) {
+          await addProduct(product);
+        }
+      }
     }
   }
 
-  List<ProductModel> get products => List<ProductModel>.unmodifiable(productsListenable.value);
+  List<ProductModel> get products =>
+      List<ProductModel>.unmodifiable(productsListenable.value);
 
   Future<void> addProduct(ProductModel product) async {
-    final List<ProductModel> next = List<ProductModel>.from(productsListenable.value)..add(product);
-    productsListenable.value = next;
-    await _persist();
+    try {
+      await _firestore
+          .collection('products')
+          .doc(product.id)
+          .set(product.toJson());
+    } catch (e) {
+      debugPrint('Error adding product: $e');
+      rethrow;
+    }
   }
 
   Future<void> updateProduct(String id, ProductModel updated) async {
-    final List<ProductModel> next = productsListenable.value.map((ProductModel p) => p.id == id ? updated : p).toList();
-    productsListenable.value = next;
-    await _persist();
+    try {
+      await _firestore.collection('products').doc(id).update(updated.toJson());
+    } catch (e) {
+      debugPrint('Error updating product: $e');
+      rethrow;
+    }
   }
 
   Future<void> deleteProduct(String id) async {
-    final List<ProductModel> next = productsListenable.value.where((ProductModel p) => p.id != id).toList();
-    productsListenable.value = next;
-    await _persist();
+    try {
+      await _firestore.collection('products').doc(id).delete();
+    } catch (e) {
+      debugPrint('Error deleting product: $e');
+      rethrow;
+    }
   }
 
-  Future<void> _persist() async {
-    if (_prefs == null) return;
-    final String raw = jsonEncode(productsListenable.value.map((ProductModel p) => p.toJson()).toList());
-    await _prefs!.setString(_storageKey, raw);
+  Future<ProductModel?> getProduct(String id) async {
+    try {
+      final doc = await _firestore.collection('products').doc(id).get();
+      if (doc.exists) {
+        return ProductModel.fromJson({'id': doc.id, ...doc.data()!});
+      }
+    } catch (e) {
+      debugPrint('Error getting product: $e');
+    }
+    return null;
   }
 }

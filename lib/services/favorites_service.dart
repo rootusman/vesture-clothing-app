@@ -1,44 +1,81 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class FavoritesService {
   static final FavoritesService _instance = FavoritesService._internal();
   factory FavoritesService() => _instance;
   FavoritesService._internal();
 
-  static const String _key = 'favorites_v1';
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final ValueNotifier<Set<String>> favoritesListenable =
+      ValueNotifier<Set<String>>(<String>{});
 
-  final ValueNotifier<Set<String>> favoritesListenable = ValueNotifier<Set<String>>(<String>{});
-
-  SharedPreferences? _prefs;
+  bool _initialized = false;
 
   Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
-    final String? raw = _prefs!.getString(_key);
-    if (raw != null) {
-      final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
-      favoritesListenable.value = decoded.map((dynamic e) => e as String).toSet();
+    if (_initialized) return;
+    _initialized = true;
+
+    // Listen to auth state changes
+    _auth.authStateChanges().listen((User? user) {
+      if (user != null) {
+        _listenToFavorites(user.uid);
+      } else {
+        favoritesListenable.value = <String>{};
+      }
+    });
+
+    // Load initial favorites if user is signed in
+    if (_auth.currentUser != null) {
+      _listenToFavorites(_auth.currentUser!.uid);
     }
+  }
+
+  void _listenToFavorites(String uid) {
+    _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('favorites')
+        .snapshots()
+        .listen((snapshot) {
+          final Set<String> ids = snapshot.docs.map((doc) => doc.id).toSet();
+          favoritesListenable.value = ids;
+        });
   }
 
   Set<String> get ids => Set<String>.from(favoritesListenable.value);
 
-  bool isFavorite(String productId) => favoritesListenable.value.contains(productId);
+  bool isFavorite(String productId) =>
+      favoritesListenable.value.contains(productId);
 
   Future<void> toggle(String productId) async {
-    final Set<String> next = Set<String>.from(favoritesListenable.value);
-    if (!next.add(productId)) {
-      next.remove(productId);
+    final user = _auth.currentUser;
+    if (user == null) {
+      debugPrint('User not signed in, cannot toggle favorite');
+      return;
     }
-    favoritesListenable.value = next;
-    await _persist();
-  }
 
-  Future<void> _persist() async {
-    if (_prefs == null) return;
-    final String raw = jsonEncode(favoritesListenable.value.toList());
-    await _prefs!.setString(_key, raw);
+    try {
+      final docRef = _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('favorites')
+          .doc(productId);
+
+      final doc = await docRef.get();
+      if (doc.exists) {
+        await docRef.delete();
+      } else {
+        await docRef.set({
+          'productId': productId,
+          'addedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Error toggling favorite: $e');
+      rethrow;
+    }
   }
 }
